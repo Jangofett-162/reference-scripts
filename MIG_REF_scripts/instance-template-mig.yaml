@@ -1,0 +1,62 @@
+resources:
+- name: apache-template
+  type: compute.v1.instanceTemplate
+  properties:
+    properties:
+      description: apache
+      tags:
+        items:
+          - webserver
+      machineType: f1-micro
+      canIpForward: false
+      disks:
+      - deviceName: boot
+        type: PERSISTENT
+        boot: true
+        autoDelete: true
+        initializeParams:
+          sourceImage: projects/your_project/global/images/family/apache
+      networkInterfaces:
+      - network: projects/your_project/global/networks/default
+      scheduling:
+        onHostMaintenance: MIGRATE
+        automaticRestart: true
+      serviceAccounts:
+        - email: default
+          scopes:
+          - https://www.googleapis.com/auth/compute.readonly
+          - https://www.googleapis.com/auth/devstorage.read_only
+          - https://www.googleapis.com/auth/service.management.readonly
+      metadata:
+        items:
+        - key: startup-script
+          value: |
+            #!/bin/bash
+            cat <<EOF > /var/www/html/index.html
+            <html>
+            <body>
+            <title>Apache Server - $(hostname)</title>
+            <img src="https://cloud.google.com/_static/9abbcf9aa7/images/cloud/gcp-logo.svg" alt="Google Cloud" height="51" width="400"><br><br>
+            <img src="https://www.datocms-assets.com/2885/1506457192-blog-packer-list.svg" alt="Packer" height="100" width="100">
+            <img src="https://blog-en.openalfa.com/iconos/logos/apache_httpd.jpg" alt="Apache" height="100" width="100">
+            <p><b>Hostname:</b> $(hostname)</p>
+            <p>A <b>Packer</b> built, <b>Deployment Manager</b> deployed, <b>GCP</b> Auto Scalling, Managed Instance Group with Load Balancer serving <b>Apache Web Server</b></p>
+            </body>
+            </html>
+            EOF
+            (cd /etc/httpd/conf.d/ && curl -O https://raw.githubusercontent.com/Stackdriver/stackdriver-agent-service-configs/master/etc/httpd/conf.d/status.conf)
+            (cd /opt/stackdriver/collectd/etc/collectd.d/ && curl -O https://raw.githubusercontent.com/Stackdriver/stackdriver-agent-service-configs/master/etc/collectd.d/apache.conf)
+- name: apache-mig
+  type: compute.v1.instanceGroupManagers
+  properties:
+    baseInstanceName: apache
+    instanceTemplate: $(ref.apache-template.selfLink)
+    targetSize: 2
+    zone: northamerica-northeast1-a
+- name: apache-as
+  type: compute.v1.autoscaler
+  properties:
+    zone: northamerica-northeast1-a
+    target: $(ref.apache-mig.selfLink)
+    autoscalingPolicy:
+      maxNumReplicas: 5
